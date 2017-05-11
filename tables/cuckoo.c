@@ -62,21 +62,38 @@ struct cuckoo_table {
 
  	initialise_inner_table(inner1, size);
 
-	o_table->table1 = *inner1;
+	o_table->table1 = inner1;
 
 	InnerTable *inner2 = malloc(sizeof(*inner2));
 	assert(inner2);
 
  	initialise_inner_table(inner2, size);
-	o_table->table2 = *inner2;
+	o_table->table2 = inner2;
 
  	o_table->size = size;
  }
 
+/* Frees an inner table */
+static void free_inner(InnerTable *i_table) {
+    assert(i_table != NULL);
+
+    /*  Free the Innards    */
+    free(i_table->slots);
+    free(i_table->inuse);
+
+    /* Free the Table */
+    free(i_table);
+}
+    
+
+/*
+ * Real Functions
+ */
+
 // initialise a cuckoo hash table with 'size' slots in each table
 CuckooHashTable *new_cuckoo_hash_table(int size) {
 
-	cuckoo_table *o_table = malloc(sizeof *o_table);
+	CuckooHashTable *o_table = malloc(sizeof *o_table);
 	assert(o_table);
 
 	// set up the internals of the table struct with arrays of size 'size'
@@ -88,23 +105,48 @@ CuckooHashTable *new_cuckoo_hash_table(int size) {
 
 // free all memory associated with 'table'
 void free_cuckoo_hash_table(CuckooHashTable *table) {
-	fprintf(stderr, "not yet implemented\n");
+    assert(table != NULL);
+    
+    /* Free the inner tables, then free the main table */
+    free_inner(table->table1);
+    free_inner(table->table2);
+
+    free(table);
 }
 
 
 // insert 'key' into 'table', if it's not in there already
 // returns true if insertion succeeds, false if it was already in there
 bool cuckoo_hash_table_insert(CuckooHashTable *table, int64 key) {
-	fprintf(stderr, "not yet implemented\n");
-	return false;
+    assert(table != NULL);
+
+    int hash1 = h1(key);
+    int hash2 = h2(key);
+
+    if(table->table1->inuse[hash1]) {
+        table->table2->slots[hash2] = key;
+        table->table2->inuse[hash2] = true;
+    } else {
+        table->table1->slots[hash1] = key;
+        table->table1->inuse[hash1] = true;
+    }
 }
 
 
 // lookup whether 'key' is inside 'table'
 // returns true if found, false if not
 bool cuckoo_hash_table_lookup(CuckooHashTable *table, int64 key) {
-	fprintf(stderr, "not yet implemented\n");
-	return false;
+    assert(table != NULL);
+
+    if(table->table1->inuse[h1(key)] && table->table1->slots[h1(key)]==key) {
+        return true;
+    }
+
+    if(table->table2->inuse[h2(key)] && table->table2->slots[h2(key)]==key) {
+        return true;
+    }
+
+    return false;
 }
 
 
