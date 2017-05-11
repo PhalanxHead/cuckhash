@@ -3,7 +3,12 @@
  * keys between two tables with two separate hash functions
  *
  * created for COMP20007 Design of Algorithms - Assignment 2, 2017
- * by ...
+ * by Matt F
+
+ * Modified and completed by:
+ * Author: 	Luke Hedt
+ * StuID:	832153
+ * Date:	11/05/2017
  */
 
 #include <stdio.h>
@@ -28,10 +33,56 @@ struct cuckoo_table {
 };
 
 
+ /*
+  * Helper Functions - Based on supplied code in linear.c
+  *
+  *	Set up the internals of an inner table struct with new
+  * arrays of size 'size'
+  */
+ static void initialise_inner_table(InnerTable *i_table, int size) {
+	/* Each single table can't be bigger than the max table size */
+	assert(size < MAX_TABLE_SIZE && "error: table has grown too large!");
+
+	i_table->slots = malloc((sizeof *i_table->slots) * size);
+ 	assert(i_table->slots);
+ 	i_table->inuse = malloc((sizeof *i_table->inuse) * size);
+ 	assert(i_table->inuse);
+ 	int i;
+ 	for (i = 0; i < size; i++) {
+ 		i_table->inuse[i] = false;
+ 	}
+ }
+ /*
+  *	Sets up the cuckoo table with inner arrays of size 'size'
+  */
+ static void initialise_cuck_table(CuckooHashTable *o_table, int size) {
+
+	InnerTable *inner1 = malloc(sizeof(*inner1));
+	assert(inner1);
+
+ 	initialise_inner_table(inner1, size);
+
+	o_table->table1 = *inner1;
+
+	InnerTable *inner2 = malloc(sizeof(*inner2));
+	assert(inner2);
+
+ 	initialise_inner_table(inner2, size);
+	o_table->table2 = *inner2;
+
+ 	o_table->size = size;
+ }
+
 // initialise a cuckoo hash table with 'size' slots in each table
 CuckooHashTable *new_cuckoo_hash_table(int size) {
-	fprintf(stderr, "not yet implemented\n");
-	return NULL;
+
+	cuckoo_table *o_table = malloc(sizeof *o_table);
+	assert(o_table);
+
+	// set up the internals of the table struct with arrays of size 'size'
+	initialise_cuck_table(o_table, size);
+
+	return o_table;
 }
 
 
@@ -65,7 +116,7 @@ void cuckoo_hash_table_print(CuckooHashTable *table) {
 	// print header
 	printf("                    table one         table two\n");
 	printf("                  key | address     address | key\n");
-	
+
 	// print rows of each table
 	int i;
 	for (i = 0; i < table->size; i++) {

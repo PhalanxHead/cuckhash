@@ -117,7 +117,7 @@ bool linear_hash_table_insert(LinearHashTable *table, int64 key) {
 			// this key already exists in the table! no need to insert
 			return false;
 		}
-		
+
 		// else, keep stepping through the table looking for a free slot
 		h = (h + STEP_SIZE) % table->size;
 		steps++;
@@ -183,7 +183,7 @@ void linear_hash_table_print(LinearHashTable *table) {
 	// print the rows of the hash table
 	int i;
 	for (i = 0; i < table->size; i++) {
-		
+
 		// print the address
 		printf(" %9d | ", i);
 
@@ -203,12 +203,12 @@ void linear_hash_table_print(LinearHashTable *table) {
 void linear_hash_table_stats(LinearHashTable *table) {
 	assert(table != NULL);
 	printf("--- table stats ---\n");
-	
+
 	// print some information about the table
 	printf("current size: %d slots\n", table->size);
 	printf("current load: %d items\n", table->load);
 	printf(" load factor: %.3f%%\n", table->load * 100.0 / table->size);
 	printf("   step size: %d slots\n", STEP_SIZE);
-	
+
 	printf("--- end stats ---\n");
 }
