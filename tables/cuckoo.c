@@ -17,6 +17,11 @@
 
 #include "cuckoo.h"
 
+#define DOUBSIZE 2
+#define MAXDEP 6
+
+
+
 // an inner table represents one of the two internal tables for a cuckoo
 // hash table. it stores two parallel arrays: 'slots' for storing keys and
 // 'inuse' for marking which entries are occupied
@@ -52,6 +57,8 @@ struct cuckoo_table {
  		i_table->inuse[i] = false;
  	}
  }
+
+
  /*
   *	Sets up the cuckoo table with inner arrays of size 'size'
   */
@@ -84,7 +91,38 @@ static void free_inner(InnerTable *i_table) {
     /* Free the Table */
     free(i_table);
 }
-    
+
+
+/* Rehashes the given table. Based on code in linear.c */
+static void rehash_table(InnerTable *i_table) {
+    assert(i_table != NULL);
+    int64 *oldslots = i_table->slots;
+    bool *oldinuse = i_table->inuse;
+    int oldsize = i_table->size;
+    int i;
+
+    initialise_inner_table(i_table, i_table->size * DOUBSIZE);
+
+    for(i=0; i<oldsize; i++) {
+        if(oldinuse[i]) {
+            cuckoo_hash_table_insert(i_table, oldslots[i]);
+        }
+    }
+    free(oldinuse);
+    free(oldslots);
+}
+
+static bool cuckoo_slot(CuckooHashTable *o_table, int64 key, int depth) {
+    assert(o_table != NULL);
+    if(depth > MAXDEP) {
+        if(o_table->table1->size <= o_table->table2->size) {
+            rehash_table(o_table->table1);
+        } else {
+            rehash_table(o_table->table2);
+        }
+    }
+    // FINISH THIS
+}
 
 /*
  * Real Functions
@@ -106,7 +144,7 @@ CuckooHashTable *new_cuckoo_hash_table(int size) {
 // free all memory associated with 'table'
 void free_cuckoo_hash_table(CuckooHashTable *table) {
     assert(table != NULL);
-    
+
     /* Free the inner tables, then free the main table */
     free_inner(table->table1);
     free_inner(table->table2);
@@ -120,16 +158,23 @@ void free_cuckoo_hash_table(CuckooHashTable *table) {
 bool cuckoo_hash_table_insert(CuckooHashTable *table, int64 key) {
     assert(table != NULL);
 
-    int hash1 = h1(key);
-    int hash2 = h2(key);
+    if(cuckoo_hash_table_lookup(table, key)) {
+        return false;
+    }
+
+    int hash1 = h1(key) % table->size;
+    int hash2 = h2(key) % table->size;
 
     if(table->table1->inuse[hash1]) {
         table->table2->slots[hash2] = key;
         table->table2->inuse[hash2] = true;
+        return true;
     } else {
         table->table1->slots[hash1] = key;
         table->table1->inuse[hash1] = true;
+        return true;
     }
+
 }
 
 
@@ -138,14 +183,20 @@ bool cuckoo_hash_table_insert(CuckooHashTable *table, int64 key) {
 bool cuckoo_hash_table_lookup(CuckooHashTable *table, int64 key) {
     assert(table != NULL);
 
-    if(table->table1->inuse[h1(key)] && table->table1->slots[h1(key)]==key) {
+    /* Make for easy referencing */
+    int hash1 = h1(key) % table->size;
+    int hash2 = h2(key) % table->size;
+
+    /* Check the data's not garbage before checking if your key is there. */
+    if(table->table1->inuse[hash1] && (table->table1->slots[hash1]==key)) {
         return true;
     }
 
-    if(table->table2->inuse[h2(key)] && table->table2->slots[h2(key)]==key) {
+    if(table->table2->inuse[hash2] && (table->table2->slots[hash2]==key)) {
         return true;
     }
 
+    /* If it hasn't been found it's not in here. */
     return false;
 }
 
