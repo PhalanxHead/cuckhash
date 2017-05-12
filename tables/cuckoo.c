@@ -48,16 +48,15 @@ struct cuckoo_table {
 	/* Each single table can't be bigger than the max table size */
 	assert(size < MAX_TABLE_SIZE && "error: table has grown too large!");
 
-	i_table->slots = malloc((sizeof *i_table->slots) * size);
+	i_table->slots = malloc((sizeof(*i_table->slots)) * size);
  	assert(i_table->slots);
- 	i_table->inuse = malloc((sizeof *i_table->inuse) * size);
+ 	i_table->inuse = malloc((sizeof(*i_table->inuse)) * size);
  	assert(i_table->inuse);
  	int i;
  	for (i = 0; i < size; i++) {
  		i_table->inuse[i] = false;
  	}
  }
-
 
  /*
   *	Sets up the cuckoo table with inner arrays of size 'size'
@@ -98,44 +97,40 @@ static void rehash_table(CuckooHashTable *o_table) {
     assert(o_table->table1 != NULL);
     assert(o_table->table2 != NULL);
 
-    int64 *oldslots1 = o_table->table1->slots;
-    bool *oldinuse1 = o_table->table1->inuse;
-
-    int64 *oldslots2 = o_table->table2->slots;
-    bool *oldinuse2 = o_table->table2->inuse;
+	InnerTable *old_in1 = o_table->table1;
+	InnerTable *old_in2 = o_table->table2;
 
     int oldsize = o_table->size;
     int i;
 
-    initialise_inner_table(o_table->table1, oldsize * DOUBSIZE);
-    initialise_inner_table(o_table->table2, oldsize * DOUBSIZE);
+    initialise_cuck_table(o_table, oldsize * DOUBSIZE);
 
     for(i=0; i<oldsize; i++) {
-        if(oldinuse1[i]) {
-            cuckoo_hash_table_insert(o_table, oldslots1[i]);
+        if(old_in1->inuse[i] == true) {
+            cuckoo_hash_table_insert(o_table, old_in1->slots[i]);
         }
     }
 
     for(i=0; i<oldsize; i++) {
-        if(oldinuse2[i]) {
-            cuckoo_hash_table_insert(o_table, oldslots2[i]);
+        if(old_in2->inuse[i] == true) {
+            cuckoo_hash_table_insert(o_table, old_in2->slots[i]);
         }
     }
-    free(oldinuse1);
-    free(oldslots1);
-    free(oldinuse2);
-    free(oldslots2);
+    free_inner(old_in1);
+    free_inner(old_in2);
 }
 
 /* Attempts to insert value, kicks the occypying value out if it's full.
- * Rehashes the table if it's cuckooed more than MAXDEP items 
+ * Rehashes the table if it's cuckooed more than MAXDEP items
  */
-static bool cuckoo_insert(CuckooHashTable *o_table, int64 key, 
+static bool cuckoo_insert(CuckooHashTable *o_table, int64 key,
                                              int hashnum, int depth) {
     assert(o_table != NULL);
     InnerTable *i_table;
-    if(depth > MAXDEP) {
+
+	if(depth > MAXDEP) {
         rehash_table(o_table);
+		depth = 0;
     }
 
     int64 oldkey;
@@ -151,7 +146,7 @@ static bool cuckoo_insert(CuckooHashTable *o_table, int64 key,
         i_table = o_table->table2;
     }
 
-    if(i_table->inuse[hash]) {
+    if(i_table->inuse[hash] == true) {
         oldkey = i_table->slots[hash];
         cuckoo_insert(o_table, oldkey, nexthash, depth+1);
     }
@@ -199,7 +194,7 @@ bool cuckoo_hash_table_insert(CuckooHashTable *table, int64 key) {
         return false;
     }
 
-    return cuckoo_insert(table, key, 1, 0); 
+    return cuckoo_insert(table, key, 1, 0);
 
 }
 
@@ -214,11 +209,11 @@ bool cuckoo_hash_table_lookup(CuckooHashTable *table, int64 key) {
     int hash2 = h2(key) % table->size;
 
     /* Check the data's not garbage before checking if your key is there. */
-    if(table->table1->inuse[hash1] && (table->table1->slots[hash1]==key)) {
+    if((table->table1->inuse[hash1] == true) && (table->table1->slots[hash1]==key)) {
         return true;
     }
 
-    if(table->table2->inuse[hash2] && (table->table2->slots[hash2]==key)) {
+    if((table->table2->inuse[hash2] == true) && (table->table2->slots[hash2]==key)) {
         return true;
     }
 
