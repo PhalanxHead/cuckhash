@@ -120,43 +120,6 @@ static void rehash_table(CuckooHashTable *o_table) {
     free_inner(old_in2);
 }
 
-/* Attempts to insert value, kicks the occypying value out if it's full.
- * Rehashes the table if it's cuckooed more than MAXDEP items
- */
-static bool cuckoo_insert(CuckooHashTable *o_table, int64 key,
-                                             int hashnum, int depth) {
-    assert(o_table != NULL);
-    InnerTable *i_table;
-
-	if(depth > MAXDEP) {
-        rehash_table(o_table);
-		depth = 0;
-    }
-
-    int64 oldkey;
-    int hash;
-    int nexthash;
-    if(hashnum == 1) {
-        hash = h1(key) % o_table->size;
-        nexthash = 2;
-        i_table = o_table->table1;
-    } else {
-        hash = h2(key) % o_table->size;
-        nexthash = 1;
-        i_table = o_table->table2;
-    }
-
-    if(i_table->inuse[hash] == true) {
-        oldkey = i_table->slots[hash];
-        cuckoo_insert(o_table, oldkey, nexthash, depth+1);
-    }
-
-    i_table->inuse[hash] = true;
-    i_table->slots[hash] = key;
-
-    return true;
-}
-
 
 /* Real Functions */
 
@@ -188,16 +151,57 @@ void free_cuckoo_hash_table(CuckooHashTable *table) {
 // insert 'key' into 'table', if it's not in there already
 // returns true if insertion succeeds, false if it was already in there
 bool cuckoo_hash_table_insert(CuckooHashTable *table, int64 key) {
+    /* Don't operate on a non-existent table */
     assert(table != NULL);
 
+    /* Don't try to rehash the same item! */
     if(cuckoo_hash_table_lookup(table, key)) {
         return false;
     }
 
-    return cuckoo_insert(table, key, 1, 0);
+    /* Only define the variables you need after you know you need them */
+    int chainlen = 0;
+    bool flg_insrt = true;
+    int hashnum = 1;
+    int hash;
+    int64 oldkey;
+    InnerTable *cur_table;
 
+    /* Repeat for as long as there are cucks to kick */
+    while(flg_insrt) {
+        /* Rehashes table after MAXDEP cucks */
+        if(chainlen > MAXDEP) {
+            rehash_table(table);
+            chainlen = 0;
+        }
+
+    /* Choose which hash table and hash function to use. */
+        if(hashnum == 1) {
+            hashnum = 2;
+            hash = h1(key) % table->size;
+            cur_table = table->table1;
+        } else {
+            hashnum = 1;
+            hash = h2(key) % table->size;
+            cur_table = table->table2;
+        }
+
+        /* Check for cucks, breaks the loop if there are none */
+        if(cur_table->inuse[hash]) {
+            oldkey = cur_table->slots[hash];
+            chainlen += 1;
+        } else {
+            flg_insrt = false;
+        }
+
+        /* Insert the key and set up the cucked key if necessary. */
+        cur_table->inuse[hash] = true;
+        cur_table->slots[hash] = key;
+        key = oldkey;
+    }
+    /* Success! */
+    return true;
 }
-
 
 // lookup whether 'key' is inside 'table'
 // returns true if found, false if not
