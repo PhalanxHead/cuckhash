@@ -92,41 +92,78 @@ static void free_inner(InnerTable *i_table) {
     free(i_table);
 }
 
+/* Rehashes the given cuckoo table. Based on code in linear.c */
+static void rehash_table(CuckooHashTable *o_table) {
+    assert(o_table != NULL);
+    assert(o_table->table1 != NULL);
+    assert(o_table->table2 != NULL);
 
-/* Rehashes the given table. Based on code in linear.c */
-static void rehash_table(InnerTable *i_table) {
-    assert(i_table != NULL);
-    int64 *oldslots = i_table->slots;
-    bool *oldinuse = i_table->inuse;
-    int oldsize = i_table->size;
+    int64 *oldslots1 = o_table->table1->slots;
+    bool *oldinuse1 = o_table->table1->inuse;
+
+    int64 *oldslots2 = o_table->table2->slots;
+    bool *oldinuse2 = o_table->table2->inuse;
+
+    int oldsize = o_table->size;
     int i;
 
-    initialise_inner_table(i_table, i_table->size * DOUBSIZE);
+    initialise_inner_table(o_table->table1, oldsize * DOUBSIZE);
+    initialise_inner_table(o_table->table2, oldsize * DOUBSIZE);
 
     for(i=0; i<oldsize; i++) {
-        if(oldinuse[i]) {
-            cuckoo_hash_table_insert(i_table, oldslots[i]);
+        if(oldinuse1[i]) {
+            cuckoo_hash_table_insert(o_table, oldslots1[i]);
         }
     }
-    free(oldinuse);
-    free(oldslots);
-}
 
-static bool cuckoo_slot(CuckooHashTable *o_table, int64 key, int depth) {
-    assert(o_table != NULL);
-    if(depth > MAXDEP) {
-        if(o_table->table1->size <= o_table->table2->size) {
-            rehash_table(o_table->table1);
-        } else {
-            rehash_table(o_table->table2);
+    for(i=0; i<oldsize; i++) {
+        if(oldinuse2[i]) {
+            cuckoo_hash_table_insert(o_table, oldslots2[i]);
         }
     }
-    // FINISH THIS
+    free(oldinuse1);
+    free(oldslots1);
+    free(oldinuse2);
+    free(oldslots2);
 }
 
-/*
- * Real Functions
+/* Attempts to insert value, kicks the occypying value out if it's full.
+ * Rehashes the table if it's cuckooed more than MAXDEP items 
  */
+static bool cuckoo_insert(CuckooHashTable *o_table, int64 key, 
+                                             int hashnum, int depth) {
+    assert(o_table != NULL);
+    InnerTable *i_table;
+    if(depth > MAXDEP) {
+        rehash_table(o_table);
+    }
+
+    int64 oldkey;
+    int hash;
+    int nexthash;
+    if(hashnum == 1) {
+        hash = h1(key) % o_table->size;
+        nexthash = 2;
+        i_table = o_table->table1;
+    } else {
+        hash = h2(key) % o_table->size;
+        nexthash = 1;
+        i_table = o_table->table2;
+    }
+
+    if(i_table->inuse[hash]) {
+        oldkey = i_table->slots[hash];
+        cuckoo_insert(o_table, oldkey, nexthash, depth+1);
+    }
+
+    i_table->inuse[hash] = true;
+    i_table->slots[hash] = key;
+
+    return true;
+}
+
+
+/* Real Functions */
 
 // initialise a cuckoo hash table with 'size' slots in each table
 CuckooHashTable *new_cuckoo_hash_table(int size) {
