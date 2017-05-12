@@ -199,18 +199,7 @@ bool cuckoo_hash_table_insert(CuckooHashTable *table, int64 key) {
         return false;
     }
 
-    int hash1 = h1(key) % table->size;
-    int hash2 = h2(key) % table->size;
-
-    if(table->table1->inuse[hash1]) {
-        table->table2->slots[hash2] = key;
-        table->table2->inuse[hash2] = true;
-        return true;
-    } else {
-        table->table1->slots[hash1] = key;
-        table->table1->inuse[hash1] = true;
-        return true;
-    }
+    return cuckoo_insert(table, key, 1, 0); 
 
 }
 
