@@ -14,13 +14,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <time.h>
 
 #include "cuckoo.h"
 
 #define DOUBSIZE 2
-#define MAXDEP 6
+#define MAXDEP 33
 
-
+/* Holds stats and info for stat calculations  */
+typedef struct stats {
+    int filled;     // Keeps a count of the number of filled slots
+    int time;       // Keeps a track of the time taken to run the commands.
+} Stats;
 
 // an inner table represents one of the two internal tables for a cuckoo
 // hash table. it stores two parallel arrays: 'slots' for storing keys and
@@ -28,6 +33,7 @@
 typedef struct inner_table {
 	int64 *slots;	// array of slots holding keys
 	bool  *inuse;	// is this slot in use or not?
+    Stats stat;     // holds stats for the stats function.
 } InnerTable;
 
 // a cuckoo hash table stores its keys in two inner tables
@@ -48,14 +54,22 @@ struct cuckoo_table {
 	/* Each single table can't be bigger than the max table size */
 	assert(size < MAX_TABLE_SIZE && "error: table has grown too large!");
 
+    /* Create slots table */
 	i_table->slots = malloc((sizeof(*i_table->slots)) * size);
  	assert(i_table->slots);
+    /* Creates an inuse table */
  	i_table->inuse = malloc((sizeof(*i_table->inuse)) * size);
  	assert(i_table->inuse);
+    /* Creates the stats struct */
+
+    /* Set up the inuse table as false */
  	int i;
  	for (i = 0; i < size; i++) {
  		i_table->inuse[i] = false;
  	}
+    /* Stats setup */
+    i_table->stat.filled = 0;
+    i_table->stat.time = 0;
  }
 
  /*
@@ -91,33 +105,40 @@ static void free_inner(InnerTable *i_table) {
     free(i_table);
 }
 
+/* Insert items from a smaller table */
+static void insert_from_old(CuckooHashTable *o_table, InnerTable *i_table,
+                                                            int old_size) {
+    int i;
+    for(i=0; i<old_size; i++) {
+        if(i_table->inuse[i] == true) {
+            cuckoo_hash_table_insert(o_table, i_table->slots[i]);
+        }
+    }
+
+    free_inner(i_table);
+
+}
+
+
 /* Rehashes the given cuckoo table. Based on code in linear.c */
 static void rehash_table(CuckooHashTable *o_table) {
+    /* Check you're operating on a real set of tables. */
     assert(o_table != NULL);
     assert(o_table->table1 != NULL);
     assert(o_table->table2 != NULL);
 
+    /* Make stuff easy to reference and less confusing. */
 	InnerTable *old_in1 = o_table->table1;
 	InnerTable *old_in2 = o_table->table2;
 
-    int oldsize = o_table->size;
-    int i;
+    int old_size = o_table->size;
 
-    initialise_cuck_table(o_table, oldsize * DOUBSIZE);
+    /* Double the size of the hash table  */
+    initialise_cuck_table(o_table, old_size * DOUBSIZE);
 
-    for(i=0; i<oldsize; i++) {
-        if(old_in1->inuse[i] == true) {
-            cuckoo_hash_table_insert(o_table, old_in1->slots[i]);
-        }
-    }
-
-    for(i=0; i<oldsize; i++) {
-        if(old_in2->inuse[i] == true) {
-            cuckoo_hash_table_insert(o_table, old_in2->slots[i]);
-        }
-    }
-    free_inner(old_in1);
-    free_inner(old_in2);
+    /* Insert items from the smaller tables */
+    insert_from_old(o_table, old_in1, old_size);
+    insert_from_old(o_table, old_in2, old_size);
 }
 
 
@@ -190,6 +211,7 @@ bool cuckoo_hash_table_insert(CuckooHashTable *table, int64 key) {
         if(cur_table->inuse[hash]) {
             oldkey = cur_table->slots[hash];
             chainlen += 1;
+            cur_table->stat.filled -= 1;
         } else {
             flg_insrt = false;
         }
@@ -197,6 +219,7 @@ bool cuckoo_hash_table_insert(CuckooHashTable *table, int64 key) {
         /* Insert the key and set up the cucked key if necessary. */
         cur_table->inuse[hash] = true;
         cur_table->slots[hash] = key;
+        cur_table->stat.filled += 1;
         key = oldkey;
     }
     /* Success! */
@@ -264,5 +287,21 @@ void cuckoo_hash_table_print(CuckooHashTable *table) {
 
 // print some statistics about 'table' to stdout
 void cuckoo_hash_table_stats(CuckooHashTable *table) {
-	fprintf(stderr, "not yet implemented\n");
+	assert(table != NULL);
+	printf("--- table stats ---\n");
+
+	// print some information about the table
+	printf("current size: %d slots\n", table->size);
+	printf("filled slots in t1: %d slots\n", table->table1->stat.filled);
+	printf("filled slots in t2: %d slots\n", table->table2->stat.filled);
+	printf("Load Percentage in t1: %.2f% \n", table->table1->stat.filled
+                / (float)table->size * 100);
+	printf("Load Percentage in t2: %.2f% \n", table->table2->stat.filled
+                / (float)table->size * 100);
+
+	// also calculate CPU usage in seconds and print this
+	float seconds = table->table1->stat.time * 1.0 / CLOCKS_PER_SEC;
+	printf("    CPU time spent: %.6f sec\n", seconds);
+
+	printf("--- end stats ---\n");
 }
