@@ -14,6 +14,11 @@
 // how many cells to advance at a time while looking for a free slot
 #define STEP_SIZE 1
 
+typedef struct stats {
+    int collisions; // Holds the number of first-time collisions
+    int probe;      // Holds the number of probes for probelen calcs
+} Stats;
+
 // a hash table is an array of slots holding keys, along with a parallel array
 // of boolean markers recording which slots are in use (true) or free (false)
 // important because not-in-use slots might hold garbage data, as they may
@@ -23,6 +28,7 @@ struct linear_table {
 	bool  *inuse;	// is this slot in use or not?
 	int size;		// the size of both of these arrays right now
 	int load;		// number of keys in the table right now
+    Stats stat;
 };
 
 
@@ -46,6 +52,8 @@ static void initialise_table(LinearHashTable *table, int size) {
 
 	table->size = size;
 	table->load = 0;
+    table->stat.collisions = 0;
+    table->stat.probe = 0;
 }
 
 
