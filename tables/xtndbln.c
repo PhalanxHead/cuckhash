@@ -98,7 +98,7 @@ static void double_table(XtndblNHashTable *table) {
 // use 'xtndbl1_hash_table_insert()' instead for inserting new keys
 static void reinsert_key(XtndblNHashTable *table, int64 key) {
 	int address = rightmostnbits(table->depth, h1(key));
-	table->buckets[address]->keys[table->buckets[address]->nkeys+1] = key;
+	table->buckets[address]->keys[table->buckets[address]->nkeys] = key;
 	table->buckets[address]->nkeys += 1;
 }
 
@@ -183,6 +183,7 @@ XtndblNHashTable *new_xtndbln_hash_table(int bucketsize) {
 	table->buckets[0] = malloc(sizeof(table->buckets[0]));
 	init_bucket(table->buckets[0], 0, 0, bucketsize);
 	table->depth = 0;
+	table->bucketsize = bucketsize;
 
 	table->stats.nbuckets = 1;
 	table->stats.nkeys = 0;
@@ -231,7 +232,7 @@ bool xtndbln_hash_table_insert(XtndblNHashTable *table, int64 key) {
 	}
 
 	// if not, make space in the table until our target bucket has space
-	while (table->buckets[address]->nkeys == table->bucketsize) {
+	if (table->buckets[address]->nkeys == table->bucketsize) {
 		split_bucket(table, address);
 
 		// and recalculate address because we might now need more bits
@@ -239,7 +240,7 @@ bool xtndbln_hash_table_insert(XtndblNHashTable *table, int64 key) {
 	}
 
 	// there's now space! we can insert this key
-	table->buckets[address]->keys[table->buckets[address]->nkeys+1] = key;
+	table->buckets[address]->keys[table->buckets[address]->nkeys] = key;
 	table->buckets[address]->nkeys += 1;
 	table->stats.nkeys++;
 
