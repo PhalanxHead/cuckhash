@@ -22,6 +22,9 @@
 
 #include "xuckoo.h"
 
+// macro to calculate the rightmost n bits of a number x
+#define rightmostnbits(n, x) (x) & ((1 << (n)) - 1)
+
 // a bucket stores a single key (full=true) or is empty (full=false)
 // it also knows how many bits are shared between possible keys, and the first 
 // table address that references it
@@ -63,17 +66,6 @@ struct xuckoo_table {
  * Helper Functions
  * */
 
-static Bucket *new_bucket(int first_address, int depth) {
-	Bucket *bucket = malloc(sizeof *bucket);
-	assert(bucket);
-
-	bucket->id = first_address;
-	bucket->depth = depth;
-	bucket->full = false;
-
-	return bucket;
-}
-
 /* Initialises values for the new bucket */
 static void init_bucket(Bucket *bucket, int first_address, int depth) {
     /* Make sure this is your memory */
@@ -82,6 +74,7 @@ static void init_bucket(Bucket *bucket, int first_address, int depth) {
 	bucket->id = first_address;
 	bucket->depth = depth;
 	bucket->full = false;
+
 }
 
 /* Initialises an InnerTable */
@@ -89,13 +82,16 @@ static void init_xuck_table(InnerTable *table) {
     /* Don't touch memory you didn't ask for! */
     assert(table);
 
-	table->size = 1;
-	table->buckets = malloc(sizeof *table->buckets);
-	assert(table->buckets);
-	table->buckets[0] = new_bucket(0, 0);
-	table->depth = 0;
+    /* Initialise values and create bucket space */
+    table->size = 1;
+    table->buckets = malloc(sizeof(*(table->buckets)));
+    assert(table->buckets);
+    table->buckets[0] = malloc(sizeof(table->buckets[0]));
+    init_bucket(table->buckets[0], 0, 0);
+    table->depth = 0;
     table->nkeys = 0;
 
+    /* Initialise Stats Info */
 	table->stats.nbuckets = 1;
 	table->stats.nkeys = 0;
 	table->stats.time = 0;
@@ -114,8 +110,10 @@ XuckooHashTable *new_xuckoo_hash_table() {
     /* Create and initialise both inner tables */
     InnerTable *table1 = malloc(sizeof(*table1));
     init_xuck_table(table1);
+    table->table1 = table1;
     InnerTable *table2 = malloc(sizeof(*table2));
     init_xuck_table(table2);
+    table->table2 = table2;
 
     return table;
 }
@@ -123,23 +121,112 @@ XuckooHashTable *new_xuckoo_hash_table() {
 
 // free all memory associated with 'table'
 void free_xuckoo_hash_table(XuckooHashTable *table) {
-	fprintf(stderr, "not yet implemented\n");
+	assert(table);
+    
+    /* Free Inner1 */
+	// loop backwards through the array of pointers, freeing buckets only as we
+	// reach their first reference
+	// (if we loop through forwards, we wouldn't know which reference was last)
+	int i;
+    for (i = table->table1->size-1; i >= 0; i--) {
+        if (table->table1->buckets[i]->id == i) {
+            free(table->table1->buckets[i]);
+        }
+	}
+
+	// free the array of bucket pointers
+	free(table->table1->buckets);
+    free(table->table1);
+    /* Free Inner2 */
+    for (i = table->table2->size-1; i >= 0; i--) {
+        if (table->table2->buckets[i]->id == i) {
+            free(table->table2->buckets[i]);
+        }
+	}
+
+	// free the array of bucket pointers
+	free(table->table2->buckets);
+    free(table->table2);
+
+	// free the table struct itself
+	free(table);
 }
 
 
 // insert 'key' into 'table', if it's not in there already
 // returns true if insertion succeeds, false if it was already in there
 bool xuckoo_hash_table_insert(XuckooHashTable *table, int64 key) {
-	fprintf(stderr, "not yet implemented\n");
-	return false;
+	assert(table);
+	int start_time = clock(); // start timing
+    InnerTable *ftable = table->table1;
+	int hash = h1(key);
+    int hashnum = 1;
+
+    // Decide on table and hash algorithm
+    if(table->table2->size < table->table1->size) {
+        ftable = table->table2;
+        hash = h2(key);
+        hashnum = 2;
+    }
+    
+    
+	// calculate table address
+	int address = rightmostnbits(table->depth, hash);
+
+	// is this key already there?
+	if (xuckoo_hash_table_lookup(table, key)) {
+		table->stats.time += clock() - start_time; // add time elapsed
+		return false;
+	}
+
+    /* If not, cuckoo insert the key until a space is found, resize the tables
+    * if necessary */
+	// if not, make space in the table until our target bucket has space
+	while (table->buckets[address]->full) {
+		split_bucket(table, address);
+
+		// and recalculate address because we might now need more bits
+		address = rightmostnbits(table->depth, hash);
+	}
+
+	// there's now space! we can insert this key
+	table->buckets[address]->key = key;
+	table->buckets[address]->full = true;
+	table->stats.nkeys++;
+
+	// add time elapsed to total CPU time before returning
+	table->stats.time += clock() - start_time;
+	return true;
 }
 
 
 // lookup whether 'key' is inside 'table'
 // returns true if found, false if not
 bool xuckoo_hash_table_lookup(XuckooHashTable *table, int64 key) {
-	fprintf(stderr, "not yet implemented\n");
-	return false;
+	assert(table);
+	int start_time = clock(); // start timing
+
+	// calculate table address for this key
+	int address = rightmostnbits(table->table1->depth, h1(key));
+
+	// look for the key in table1 in that bucket (unless it's empty)
+	bool found = false;
+	if (table->table1->buckets[address]->full) {
+		// found it? Only search table2 if the  h1 key has somehting in it.
+		if(table->table1->buckets[address]->key == key) {
+            found = true;
+        } else {
+	        address = rightmostnbits(table->table2->depth, h2(key));
+		    if(table->table2->buckets[address] && 
+                            table->table2->buckets[address]->key == key) {
+                found = true;
+            }
+        }
+	}
+
+	// add time elapsed to total CPU time before returning result
+	table->table1->stats.time += clock() - start_time;
+	return found;
 }
 
 
