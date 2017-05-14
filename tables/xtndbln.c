@@ -3,7 +3,12 @@
  * resolving collisions by incrementally growing the hash table
  *
  * created for COMP20007 Design of Algorithms - Assignment 2, 2017
- * by ...
+ * by Matt F
+ *
+ * Modified By:
+ * Author:  Luke Hedt
+ * StuID:   832153
+ * Date:    13/05/2017
  */
 
 #include <stdio.h>
@@ -11,6 +16,10 @@
 #include <assert.h>
 
 #include "xtndbln.h"
+
+// macro to calculate the rightmost n bits of a number x
+#define rightmostnbits(n, x) (x) & ((1 << (n)) - 1)
+
 
 // a bucket stores an array of keys
 // it also knows how many bits are shared between possible keys, and the first 
@@ -34,10 +43,43 @@ struct xtndbln_table {
 };
 
 
+/* 
+ * Helper Functions
+ */
+/* Initialises a Bucket with size 'bucketsize' */
+static void init_bucket(Bucket *bucket, int id, int depth, int bucksize) {
+    /* Don't play with memory that isn't yours! */
+    assert(bucket);
+
+    /* Create a safe space for the keys in the bucket. */
+    bucket->keys = malloc(sizeof(bucket->keys) * bucksize);
+    assert(bucket->keys);
+
+    /* Set all the relevant stuff up. */
+    bucket->id = id;
+    bucket->depth = depth;
+    bucket->nkeys = 0;
+}
+
+
+/* 
+ * Real Functions
+ */
+
 // initialise an extendible hash table with 'bucketsize' keys per bucket
 XtndblNHashTable *new_xtndbln_hash_table(int bucketsize) {
-	fprintf(stderr, "not yet implemented\n");
-	return NULL;
+
+	// calculate table address
+	//int hash = h1(key);
+	//int address = rightmostnbits(table->depth, hash);
+
+    XtndblNHashTable *table = malloc(sizeof(*table));
+    table->buckets = malloc(sizeof(table->buckets));
+    table->size = 0;
+    table->depth = 1;
+    table->bucketsize = bucketsize;
+
+    //init_bucket(*(table->buckets), address, 1, bucketsize);
 }
 
 

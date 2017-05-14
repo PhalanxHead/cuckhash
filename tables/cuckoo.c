@@ -18,13 +18,17 @@
 
 #include "cuckoo.h"
 
+/* Removing the Magic Numbers */
 #define DOUBSIZE 2
-#define MAXDEP 33
+/* Arbitrary size to call a 'cycle' */
+#define MAXDEP 35
 
 /* Holds stats and info for stat calculations  */
 typedef struct stats {
-    int filled;     // Keeps a count of the number of filled slots
     int time;       // Keeps a track of the time taken to run the commands.
+    int collisions; // Keeps a track of how many keys collide on their first
+                    // insert.
+    int probes;     // Keeps a track of the total number of kicked items
 } Stats;
 
 // an inner table represents one of the two internal tables for a cuckoo
@@ -33,7 +37,7 @@ typedef struct stats {
 typedef struct inner_table {
 	int64 *slots;	// array of slots holding keys
 	bool  *inuse;	// is this slot in use or not?
-    Stats stat;     // holds stats for the stats function.
+    int filled;     // Keeps a count of the number of filled slots.
 } InnerTable;
 
 // a cuckoo hash table stores its keys in two inner tables
@@ -41,6 +45,7 @@ struct cuckoo_table {
 	InnerTable *table1; // first table
 	InnerTable *table2; // second table
 	int size;			// size of each table
+    Stats stat;         // holds stats for the stats function.
 };
 
 
@@ -68,9 +73,8 @@ struct cuckoo_table {
  		i_table->inuse[i] = false;
  	}
     /* Stats setup */
-    i_table->stat.filled = 0;
-    i_table->stat.time = 0;
- }
+    i_table->filled = 0;
+}
 
  /*
   *	Sets up the cuckoo table with inner arrays of size 'size'
@@ -91,6 +95,7 @@ struct cuckoo_table {
 	o_table->table2 = inner2;
 
  	o_table->size = size;
+    o_table->stat.time = 0;
  }
 
 /* Frees an inner table */
@@ -105,19 +110,6 @@ static void free_inner(InnerTable *i_table) {
     free(i_table);
 }
 
-/* Insert items from a smaller table */
-static void insert_from_old(CuckooHashTable *o_table, InnerTable *i_table,
-                                                            int old_size) {
-    int i;
-    for(i=0; i<old_size; i++) {
-        if(i_table->inuse[i] == true) {
-            cuckoo_hash_table_insert(o_table, i_table->slots[i]);
-        }
-    }
-
-    free_inner(i_table);
-
-}
 
 
 /* Rehashes the given cuckoo table. Based on code in linear.c */
@@ -137,8 +129,18 @@ static void rehash_table(CuckooHashTable *o_table) {
     initialise_cuck_table(o_table, old_size * DOUBSIZE);
 
     /* Insert items from the smaller tables */
-    insert_from_old(o_table, old_in1, old_size);
-    insert_from_old(o_table, old_in2, old_size);
+    int i;
+    for(i=0; i<old_size; i++) {
+        if(old_in1->inuse[i] == true) {
+            cuckoo_hash_table_insert(o_table, old_in1->slots[i]);
+        }
+        if(old_in2->inuse[i] == true) {
+            cuckoo_hash_table_insert(o_table, old_in2->slots[i]);
+        }
+    }
+
+    free_inner(old_in1);
+    free_inner(old_in2);
 }
 
 
@@ -152,6 +154,7 @@ CuckooHashTable *new_cuckoo_hash_table(int size) {
 
 	// set up the internals of the table struct with arrays of size 'size'
 	initialise_cuck_table(o_table, size);
+    o_table->stat.collisions = 0;
 
 	return o_table;
 }
@@ -173,7 +176,8 @@ void free_cuckoo_hash_table(CuckooHashTable *table) {
 // returns true if insertion succeeds, false if it was already in there
 bool cuckoo_hash_table_insert(CuckooHashTable *table, int64 key) {
     /* Don't operate on a non-existent table */
-    assert(table != NULL);
+    assert(table);
+    int start_time = clock(); // start timing
 
     /* Don't try to rehash the same item! */
     if(cuckoo_hash_table_lookup(table, key)) {
@@ -183,9 +187,10 @@ bool cuckoo_hash_table_insert(CuckooHashTable *table, int64 key) {
     /* Only define the variables you need after you know you need them */
     int chainlen = 0;
     bool flg_insrt = true;
+    bool flg_first = true;
     int hashnum = 1;
     int hash;
-    int64 oldkey;
+    int64 oldkey = -1;
     InnerTable *cur_table;
 
     /* Repeat for as long as there are cucks to kick */
@@ -209,9 +214,14 @@ bool cuckoo_hash_table_insert(CuckooHashTable *table, int64 key) {
 
         /* Check for cucks, breaks the loop if there are none */
         if(cur_table->inuse[hash]) {
+            if(flg_first) {
+                table->stat.collisions += 1;
+                flg_first = false;
+            }
             oldkey = cur_table->slots[hash];
             chainlen += 1;
-            cur_table->stat.filled -= 1;
+            cur_table->filled -= 1;
+            table->stat.probes += 1;
         } else {
             flg_insrt = false;
         }
@@ -219,17 +229,20 @@ bool cuckoo_hash_table_insert(CuckooHashTable *table, int64 key) {
         /* Insert the key and set up the cucked key if necessary. */
         cur_table->inuse[hash] = true;
         cur_table->slots[hash] = key;
-        cur_table->stat.filled += 1;
+        cur_table->filled += 1;
         key = oldkey;
     }
     /* Success! */
+    // add time elapsed to total CPU time before returning
+	table->stat.time += clock() - start_time;
     return true;
 }
 
 // lookup whether 'key' is inside 'table'
 // returns true if found, false if not
 bool cuckoo_hash_table_lookup(CuckooHashTable *table, int64 key) {
-    assert(table != NULL);
+    assert(table);
+    int start_time = clock(); // start timing
 
     /* Make for easy referencing */
     int hash1 = h1(key) % table->size;
@@ -237,14 +250,20 @@ bool cuckoo_hash_table_lookup(CuckooHashTable *table, int64 key) {
 
     /* Check the data's not garbage before checking if your key is there. */
     if((table->table1->inuse[hash1] == true) && (table->table1->slots[hash1]==key)) {
+        // add time elapsed to total CPU time before returning
+    	table->stat.time += clock() - start_time;
         return true;
     }
 
     if((table->table2->inuse[hash2] == true) && (table->table2->slots[hash2]==key)) {
+        // add time elapsed to total CPU time before returning
+    	table->stat.time += clock() - start_time;
         return true;
     }
 
     /* If it hasn't been found it's not in here. */
+    // add time elapsed to total CPU time before returning
+	table->stat.time += clock() - start_time;
     return false;
 }
 
@@ -291,17 +310,21 @@ void cuckoo_hash_table_stats(CuckooHashTable *table) {
 	printf("--- table stats ---\n");
 
 	// print some information about the table
-	printf("current size: %d slots\n", table->size);
-	printf("filled slots in t1: %d slots\n", table->table1->stat.filled);
-	printf("filled slots in t2: %d slots\n", table->table2->stat.filled);
-	printf("Load Percentage in t1: %.2f% \n", table->table1->stat.filled
+	printf("Current size: %d slots\n", table->size);
+	printf("Filled slots: %d slots\n",
+            table->table1->filled + table->table2->filled);
+	printf("Load Percentage in t1: %.2f% \n", table->table1->filled
                 / (float)table->size * 100);
-	printf("Load Percentage in t2: %.2f% \n", table->table2->stat.filled
+	printf("Load Percentage in t2: %.2f% \n", table->table2->filled
                 / (float)table->size * 100);
 
+    printf("Number of collisions: %d \n", table->stat.collisions);
+    printf("Averge probe length: %.2f \n",
+                    (float)table->stat.probes/table->stat.collisions);
+
 	// also calculate CPU usage in seconds and print this
-	float seconds = table->table1->stat.time * 1.0 / CLOCKS_PER_SEC;
-	printf("    CPU time spent: %.6f sec\n", seconds);
+	float seconds = table->stat.time * 1.0 / CLOCKS_PER_SEC;
+	printf("CPU time spent: %.6f sec\n", seconds);
 
 	printf("--- end stats ---\n");
 }
