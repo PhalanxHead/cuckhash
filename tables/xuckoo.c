@@ -80,7 +80,9 @@ static void init_xuck_table(InnerTable *table) {
 
     /* Initialise values and create bucket space */
     table->size = 1;
-    table->buckets[0] = malloc(sizeof(*(table->buckets)));
+    table->buckets = malloc(sizeof(*(table->buckets)));
+    assert(table->buckets);
+    table->buckets[0] = malloc(sizeof(table->buckets[0]));
     init_bucket(table->buckets[0], 0, 0);
     table->depth = 0;
     table->nkeys = 0;
@@ -104,7 +106,7 @@ XuckooHashTable *new_xuckoo_hash_table() {
     /* Create and initialise both inner tables */
     InnerTable *table1 = malloc(sizeof(*table1));
     init_xuck_table(table1);
-    InnerTable *table2 = malloc(sizeof(*table1));
+    InnerTable *table2 = malloc(sizeof(*table2));
     init_xuck_table(table2);
 
     return table;
