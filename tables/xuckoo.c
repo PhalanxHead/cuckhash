@@ -206,6 +206,7 @@ static void xuck_insert(XuckooHashTable *table, int hashnum, int64 key) {
     int64 oldkey;
     InnerTable *ftable;
 
+    /* Loop until flagged, flagged if key inserted */
     while(flg_insrt) {
         /* Decide on Hash function and Inner Table */
         if(hashnum == 1) {
@@ -286,10 +287,10 @@ void free_xuckoo_hash_table(XuckooHashTable *table) {
             free(table->table1->buckets[i]);
         }
 	}
-
 	// free the array of bucket pointers
 	free(table->table1->buckets);
     free(table->table1);
+
     /* Free Inner2 */
     for (i = table->table2->size-1; i >= 0; i--) {
         if (table->table2->buckets[i]->id == i) {
@@ -426,6 +427,21 @@ void xuckoo_hash_table_print(XuckooHashTable *table) {
 
 // print some statistics about 'table' to stdout
 void xuckoo_hash_table_stats(XuckooHashTable *table) {
-	fprintf(stderr, "not yet implemented\n");
-	return;
+	assert(table);
+
+	printf("--- table stats ---\n");
+
+	// print some stats about state of the table
+	printf("current table1 size: %d\n", table->table1->size);
+	printf("    number of keys: %d\n", table->table1->stats.nkeys);
+	printf(" number of buckets: %d\n", table->table1->stats.nbuckets);
+	printf("current table2 size: %d\n", table->table2->size);
+	printf("    number of keys: %d\n", table->table2->stats.nkeys);
+	printf(" number of buckets: %d\n", table->table2->stats.nbuckets);
+
+	// also calculate CPU usage in seconds and print this
+	float seconds = table->table1->stats.time * 1.0 / CLOCKS_PER_SEC;
+	printf("    CPU time spent: %.6f sec\n", seconds);
+
+	printf("--- end stats ---\n");
 }

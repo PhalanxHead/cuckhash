@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <time.h>
 
 #include "linear.h"
 
@@ -17,6 +18,8 @@
 typedef struct stats {
     int collisions; // Holds the number of first-time collisions
     int probe;      // Holds the number of probes for probelen calcs
+    int ins_time;   // Holds the total time it took to insert all the items
+    int look_time;  // Holds the total time taken to lookup all the called items
 } Stats;
 
 // a hash table is an array of slots holding keys, along with a parallel array
@@ -54,6 +57,8 @@ static void initialise_table(LinearHashTable *table, int size) {
 	table->load = 0;
     table->stat.collisions = 0;
     table->stat.probe = 0;
+    table->stat.ins_time = 0;
+    table->stat.look_time = 0;
 }
 
 
@@ -111,6 +116,8 @@ void free_linear_hash_table(LinearHashTable *table) {
 // returns true if insertion succeeds, false if it was already in there
 bool linear_hash_table_insert(LinearHashTable *table, int64 key) {
 	assert(table != NULL);
+    bool flg_first = true;
+    int start_time = clock(); // start timing
 
 	// need to count our steps to make sure we recognise when the table is full
 	int steps = 0;
@@ -129,6 +136,12 @@ bool linear_hash_table_insert(LinearHashTable *table, int64 key) {
 		// else, keep stepping through the table looking for a free slot
 		h = (h + STEP_SIZE) % table->size;
 		steps++;
+        if(flg_first) {
+            flg_first = false;
+            table->stat.collisions += 1;
+        }
+        /* Increase probe counter */
+        table->stat.probe += 1;
 	}
 
 	// if we used up all of our steps, then we're back where we started and the
@@ -136,6 +149,7 @@ bool linear_hash_table_insert(LinearHashTable *table, int64 key) {
 	if (steps == table->size) {
 		// let's make some more space and then try to insert this key again!
 		double_table(table);
+	    table->stat.ins_time += clock() - start_time;
 		return linear_hash_table_insert(table, key);
 
 	} else {
@@ -143,6 +157,7 @@ bool linear_hash_table_insert(LinearHashTable *table, int64 key) {
 		table->slots[h] = key;
 		table->inuse[h] = true;
 		table->load++;
+	    table->stat.ins_time += clock() - start_time;
 		return true;
 	}
 }
@@ -152,6 +167,7 @@ bool linear_hash_table_insert(LinearHashTable *table, int64 key) {
 // returns true if found, false if not
 bool linear_hash_table_lookup(LinearHashTable *table, int64 key) {
 	assert(table != NULL);
+    int start_time = clock(); // start timing
 
 	// need to count our steps to make sure we recognise when the table is full
 	int steps = 0;
@@ -165,6 +181,7 @@ bool linear_hash_table_lookup(LinearHashTable *table, int64 key) {
 
 		if (table->slots[h] == key) {
 			// found the key!
+	        table->stat.look_time += clock() - start_time;
 			return true;
 		}
 
@@ -175,6 +192,7 @@ bool linear_hash_table_lookup(LinearHashTable *table, int64 key) {
 
 	// we have either searched the whole table or come back to where we started
 	// either way, the key is not in the hash table
+	table->stat.look_time += clock() - start_time;
 	return false;
 }
 
@@ -213,9 +231,16 @@ void linear_hash_table_stats(LinearHashTable *table) {
 	printf("--- table stats ---\n");
 
 	// print some information about the table
-	printf("current size: %d slots\n", table->size);
-	printf("current load: %d items\n", table->load);
-	printf(" load factor: %.3f%%\n", table->load * 100.0 / table->size);
+	printf("Current size: %d slots\n", table->size);
+	printf("Current load: %d items\n", table->load);
+	printf("Load factor: %.3f%%\n", table->load * 100.0 / table->size);
+    printf("Num Collisions: %d\n", table->stat.collisions);
+    printf("Average probe len: %.4f\n", 
+                (float)table->stat.probe / table->stat.collisions);
+	float insertsec = table->stat.ins_time * 1.0 / CLOCKS_PER_SEC;
+    printf("Time taken inserting: %.6f seconds\n", insertsec);
+	float looksec = table->stat.look_time * 1.0 / CLOCKS_PER_SEC;
+    printf("Time taken looking up: %.6f seconds\n", looksec);
 	printf("   step size: %d slots\n", STEP_SIZE);
 
 	printf("--- end stats ---\n");

@@ -39,13 +39,13 @@ cmdgen.o: inthash.h
 clean:
 	rm -f $(OBJ) cmdgen.o
 clobber: clean
-	rm -f $(EXE) 
+	rm -f $(EXE)
 cleanly: $(EXE) clean
 
 
 # SUBMISSION TARGET
 
-STUDENTNUM = STUDENT-NUMBER
+STUDENTNUM = 832153
 SUBMISSION = Makefile report.pdf main.c hashtbl.c hashtbl.h inthash.c inthash.h\
 	tables/linear.h  tables/linear.c  tables/cuckoo.h  tables/cuckoo.c  \
 	tables/xtndbl1.h tables/xtndbl1.c tables/xtndbln.h tables/xtndbln.c \

@@ -65,9 +65,8 @@ struct cuckoo_table {
     /* Creates an inuse table */
  	i_table->inuse = malloc((sizeof(*i_table->inuse)) * size);
  	assert(i_table->inuse);
-    /* Creates the stats struct */
 
-    /* Set up the inuse table as false */
+    /* Set up the inuse table, marking all elements as false */
  	int i;
  	for (i = 0; i < size; i++) {
  		i_table->inuse[i] = false;
@@ -109,8 +108,6 @@ static void free_inner(InnerTable *i_table) {
     /* Free the Table */
     free(i_table);
 }
-
-
 
 /* Rehashes the given cuckoo table. Based on code in linear.c */
 static void rehash_table(CuckooHashTable *o_table) {
@@ -155,6 +152,7 @@ CuckooHashTable *new_cuckoo_hash_table(int size) {
 	// set up the internals of the table struct with arrays of size 'size'
 	initialise_cuck_table(o_table, size);
     o_table->stat.collisions = 0;
+    o_table->stat.probes = 0;
 
 	return o_table;
 }

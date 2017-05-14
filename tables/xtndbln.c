@@ -317,5 +317,18 @@ void xtndbln_hash_table_print(XtndblNHashTable *table) {
 
 // print some statistics about 'table' to stdout
 void xtndbln_hash_table_stats(XtndblNHashTable *table) {
-	fprintf(stderr, "not yet implemented\n");
+	assert(table);
+
+	printf("--- table stats ---\n");
+
+	// print some stats about state of the table
+	printf("current table size: %d\n", table->size);
+	printf("    number of keys: %d\n", table->stats.nkeys);
+	printf("number of buckets: %d\n", table->stats.nbuckets);
+
+	// also calculate CPU usage in seconds and print this
+	float seconds = table->stats.time * 1.0 / CLOCKS_PER_SEC;
+	printf("    CPU time spent: %.6f sec\n", seconds);
+
+	printf("--- end stats ---\n");
 }
