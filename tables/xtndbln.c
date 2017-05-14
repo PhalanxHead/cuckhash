@@ -107,7 +107,7 @@ static void split_bucket(XtndblNHashTable *table, int address) {
 	int i;
 	// FIRST,
 	// do we need to grow the table?
-	if (table->buckets[address]->depth == table->depth) {
+	if (table->buckets[address]->depth >= table->depth) {
 		// yep, this bucket is down to its last pointer
 		double_table(table);
 	}
@@ -232,7 +232,7 @@ bool xtndbln_hash_table_insert(XtndblNHashTable *table, int64 key) {
 	}
 
 	// if not, make space in the table until our target bucket has space
-	if (table->buckets[address]->nkeys == table->bucketsize) {
+	while (table->buckets[address]->nkeys >= table->bucketsize) {
 		split_bucket(table, address);
 
 		// and recalculate address because we might now need more bits
@@ -264,9 +264,9 @@ bool xtndbln_hash_table_lookup(XtndblNHashTable *table, int64 key) {
 	bool found = false;
 	if (table->buckets[address]->nkeys > 0) {
 		for(i=0; i<table->buckets[address]->nkeys; i++) {
-			if(table->buckets[address]->keys[i]) {
+			if(table->buckets[address]->keys[i] == key) {
 				// found it?
-				found = table->buckets[address]->keys[i] == key;
+				found = true;
 			}
 		}
 	}

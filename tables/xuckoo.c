@@ -5,12 +5,20 @@
 * incrementally in response to cycles
 *
 * created for COMP20007 Design of Algorithms - Assignment 2, 2017
-* by ...
+* by Matt F
+*
+* Modified By:
+* Author:   Luke Hedt
+* StuID:    832153
+* Date:     14/05/2017
+*
+* Code based on cuckoo.c and xtndbl1.c unless stated otherwise.
 */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <time.h>
 
 #include "xuckoo.h"
 
@@ -25,6 +33,14 @@ typedef struct bucket {
 	int64 key;	// the key stored in this bucket
 } Bucket;
 
+// helper structure to store statistics gathered
+typedef struct stats {
+	int nbuckets;	// how many distinct buckets does the table point to
+	int nkeys;		// how many keys are being stored in the table
+	int time;		// how much CPU time has been used to insert/lookup keys
+					// in this table
+} Stats;
+
 // an inner table is an extendible hash table with an array of slots pointing 
 // to buckets holding up to 1 key, along with some information about the number 
 // of hash value bits to use for addressing
@@ -33,6 +49,7 @@ typedef struct inner_table {
 	int size;			// how many entries in the table of pointers (2^depth)
 	int depth;			// how many bits of the hash value to use (log2(size))
 	int nkeys;			// how many keys are being stored in the table
+    Stats stats;		// collection of statistics about this hash table
 } InnerTable;
 
 // a xuckoo hash table is just two inner tables for storing inserted keys
@@ -41,10 +58,56 @@ struct xuckoo_table {
 	InnerTable *table2;
 };
 
+
+/* 
+ * Helper Functions
+ * */
+
+/* Initialises values for the new bucket */
+static void init_bucket(Bucket *bucket, int first_address, int depth) {
+    /* Make sure this is your memory */
+	assert(bucket);
+
+	bucket->id = first_address;
+	bucket->depth = depth;
+	bucket->full = false;
+}
+
+/* Initialises an InnerTable */
+static void init_xuck_table(InnerTable *table) {
+    /* Don't touch memory you didn't ask for! */
+    assert(table);
+
+    /* Initialise values and create bucket space */
+    table->size = 1;
+    table->buckets[0] = malloc(sizeof(*(table->buckets)));
+    init_bucket(table->buckets[0], 0, 0);
+    table->depth = 0;
+    table->nkeys = 0;
+
+    /* Initialise Stats Info */
+	table->stats.nbuckets = 1;
+	table->stats.nkeys = 0;
+	table->stats.time = 0;
+}
+
+
+/* 
+ * Real Functions
+ */
 // initialise an extendible cuckoo hash table
 XuckooHashTable *new_xuckoo_hash_table() {
-	fprintf(stderr, "not yet implemented\n");
-	return NULL;
+    /* Ask for mem for table and make sure you have it */
+    XuckooHashTable *table = malloc(sizeof(*table));
+    assert(table);
+
+    /* Create and initialise both inner tables */
+    InnerTable *table1 = malloc(sizeof(*table1));
+    init_xuck_table(table1);
+    InnerTable *table2 = malloc(sizeof(*table1));
+    init_xuck_table(table2);
+
+    return table;
 }
 
 
