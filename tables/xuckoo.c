@@ -63,6 +63,17 @@ struct xuckoo_table {
  * Helper Functions
  * */
 
+static Bucket *new_bucket(int first_address, int depth) {
+	Bucket *bucket = malloc(sizeof *bucket);
+	assert(bucket);
+
+	bucket->id = first_address;
+	bucket->depth = depth;
+	bucket->full = false;
+
+	return bucket;
+}
+
 /* Initialises values for the new bucket */
 static void init_bucket(Bucket *bucket, int first_address, int depth) {
     /* Make sure this is your memory */
@@ -78,16 +89,13 @@ static void init_xuck_table(InnerTable *table) {
     /* Don't touch memory you didn't ask for! */
     assert(table);
 
-    /* Initialise values and create bucket space */
-    table->size = 1;
-    table->buckets = malloc(sizeof(*(table->buckets)));
-    assert(table->buckets);
-    table->buckets[0] = malloc(sizeof(table->buckets[0]));
-    init_bucket(table->buckets[0], 0, 0);
-    table->depth = 0;
+	table->size = 1;
+	table->buckets = malloc(sizeof *table->buckets);
+	assert(table->buckets);
+	table->buckets[0] = new_bucket(0, 0);
+	table->depth = 0;
     table->nkeys = 0;
 
-    /* Initialise Stats Info */
 	table->stats.nbuckets = 1;
 	table->stats.nkeys = 0;
 	table->stats.time = 0;
