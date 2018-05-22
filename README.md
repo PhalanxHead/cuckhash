@@ -4,7 +4,7 @@
 
 ### An Excerpt is shown below:
 
-###Coding Tasks
+### Coding Tasks
 
 #### Part 1: Cuckoo Hashing (4 marks)
 
